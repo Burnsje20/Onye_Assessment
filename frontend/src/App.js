@@ -1,38 +1,57 @@
+// frontend/src/App.js
 import React, { useState } from 'react';
+import { medicationService } from './services/api';
 
 function App() {
-  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [qualityData, setQualityData] = useState(null);
 
-  const handleReconcile = async () => {
-    const testData = {
-      patient_context: { age: 67, conditions: ["Type 2 Diabetes"] },
-      sources: [{ system: "Pharmacy", medication: "Metformin 1000mg" }]
-    };
-
+  const checkQuality = async () => {
+    setLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/reconcile/medication", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(testData),
-      });
+      // Mock data matching the assessment example [cite: 68-73]
+      const mockRecord = {
+        demographics: { name: "John Doe", dob: "1955-03-15", gender: "M" },
+        medications: ["Metformin 500mg"],
+        vital_signs: { blood_pressure: "340/180", heart_rate: 72 },
+        last_updated: "2024-06-15"
+      };
 
-      const data = await response.json();
-      setResult(data); // Store the "reconciled" data in our state
-    } catch (error) {
-      console.error("Error connecting to backend:", error);
+      const data = await medicationService.validateQuality(mockRecord);
+      setQualityData(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h1>Clinical Data Engine</h1>
-      <button onClick={handleReconcile}>Test Reconciliation</button>
-      
-      {result && (
-        <div style={{ marginTop: '20px', border: '1px solid green', padding: '10px' }}>
-          <h3>Result: {result.reconciled_medication}</h3>
-          <p>Confidence: {result.confidence_score * 100}%</p>
-          <p>Reasoning: {result.reasoning}</p>
+    <div style={{ padding: '40px', fontFamily: 'sans-serif' }}>
+      <h1>Clinical Data Dashboard</h1>
+      <button onClick={checkQuality} disabled={loading}>
+        {loading ? "Analyzing..." : "Run Quality Audit"}
+      </button>
+
+      {qualityData && (
+        <div style={{ marginTop: '20px' }}>
+          <h2>Overall Score: {qualityData.overall_score}/100</h2>
+          {/* visual indicators (red/yellow/green)  */}
+          <div style={{ 
+            height: '20px', 
+            width: '200px', 
+            backgroundColor: qualityData.overall_score > 70 ? 'green' : 'red',
+            borderRadius: '10px'
+          }} />
+          
+          <h3>Issues Detected:</h3>
+          <ul>
+            {qualityData.issues_detected.map((issue, index) => (
+              <li key={index}>
+                <strong>{issue.field}</strong>: {issue.issue} ({issue.severity})
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

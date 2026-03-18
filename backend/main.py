@@ -43,12 +43,17 @@ async def reconcile_medication(request: ReconcileRequest):
         # Requirement: Proper error handling 
         raise HTTPException(status_code=500, detail=str(e))
 
-# 4. Endpoint 2: Data Quality (Part of Part 1) [cite: 61]
+# 4. Endpoint 2
+from services.gemini_service import get_data_quality_from_gemini
+
 @app.post("/api/validate/data-quality")
-async def validate_data_quality(patient_record: Dict[str, Any]):
-    # You can later add a 'get_data_quality_from_gemini' function 
-    # to your services file to handle this endpoint!
-    return {"status": "Endpoint ready for quality logic"}
+async def validate_quality(request: Dict[str, Any]):
+    try:
+        # Pass the raw JSON body to the Gemini service
+        result = get_data_quality_from_gemini(request)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

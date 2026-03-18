@@ -41,3 +41,39 @@ def get_reconciliation_from_gemini(patient_data):
     response = model.generate_content(prompt)
     # Convert string response to a Python dictionary so the API can send it as JSON
     return json.loads(response.text)
+
+def get_data_quality_from_gemini(patient_record):
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        generation_config={"response_mime_type": "application/json"}
+    )
+
+    # This prompt addresses the specific "Data Quality" requirements [cite: 63, 105]
+    prompt = f"""
+    You are a clinical data auditor. Analyze the following patient record for quality.
+    
+    Check for:
+    1. Accuracy: Are values like blood pressure or heart rate physiologically possible? 
+    2. Completeness: Are essential fields like 'allergies' empty?
+    3. Timeliness: Is the 'last_updated' date too old (e.g., > 6 months)?
+    4. Clinical Plausibility: Do the medications match the conditions?
+
+    Record: {patient_record}
+
+    Return JSON matching this schema:
+    {{
+        "overall_score": integer (0-100),
+        "breakdown": {{
+            "completeness": int,
+            "accuracy": int,
+            "timeliness": int,
+            "clinical_plausibility": int
+        }},
+        "issues_detected": [
+            {{ "field": string, "issue": string, "severity": "low" | "medium" | "high" }}
+        ]
+    }}
+    """
+    
+    response = model.generate_content(prompt)
+    return json.loads(response.text)
