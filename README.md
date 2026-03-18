@@ -176,4 +176,4 @@ npm test -- --watchAll=false
 - Migrate from the deprecated `google-generativeai` package to the newer Google Gen AI SDK.
 
 ## Estimated time spent
-- 16 hours
+- 17 hours
