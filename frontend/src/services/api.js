@@ -1,26 +1,28 @@
 // frontend/src/services/api.js
 const API_BASE_URL = "http://localhost:8000/api";
 
+async function request(path, payload, fallbackMessage) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.detail || fallbackMessage);
+  }
+
+  return data;
+}
+
 export const medicationService = {
-  // Logic for Part 1: Medication Reconciliation [cite: 16]
   reconcile: async (payload) => {
-    const response = await fetch(`${API_BASE_URL}/reconcile/medication`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) throw new Error("Reconciliation failed");
-    return response.json();
+    return request("/reconcile/medication", payload, "Reconciliation failed");
   },
 
-  // Logic for Part 1: Data Quality Validation [cite: 61]
   validateQuality: async (patientRecord) => {
-    const response = await fetch(`${API_BASE_URL}/validate/data-quality`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patientRecord),
-    });
-    if (!response.ok) throw new Error("Quality validation failed");
-    return response.json();
-  }
+    return request("/validate/data-quality", patientRecord, "Quality validation failed");
+  },
 };

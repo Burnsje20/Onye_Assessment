@@ -6,10 +6,8 @@ __pycache__/
 *.py[cod]
 venv/
 .venv/
-.pytest_cache/
 
 # React / Node
 node_modules/
 build/
-coverage/
 .DS_Store

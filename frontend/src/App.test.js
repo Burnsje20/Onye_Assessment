@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('renders simple reconciliation ui', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(screen.getByText(/clinical reconciliation engine/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /run ai reconciliation/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /run data quality check/i })).toBeInTheDocument();
 });

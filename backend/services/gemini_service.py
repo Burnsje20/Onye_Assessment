@@ -1,31 +1,96 @@
 # backend/services/gemini_service.py
-import google.generativeai as genai
-import os
 import json
+import os
+import time
+from pathlib import Path
+
+import google.generativeai as genai
 from dotenv import load_dotenv
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parents[1]
+ENV_PATH = BASE_DIR / ".env"
+load_dotenv(dotenv_path=ENV_PATH)
+DEFAULT_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+RETRY_DELAYS_SECONDS = (1, 2)
+PROMPT_CACHE = {}
 
-# Configure using the environment variable we set up in .env
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-def get_reconciliation_from_gemini(patient_data):
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        generation_config={
-            "response_mime_type": "application/json",
-        }
+
+def _extract_recent_labs(patient_data):
+    patient_context = patient_data.get("patient_context", {}) or {}
+    return patient_context.get("recent_labs") or patient_data.get("recent_labs", {}) or {}
+
+
+def _build_model():
+    if not os.getenv("GEMINI_API_KEY"):
+        raise RuntimeError(f"Missing GEMINI_API_KEY in {ENV_PATH}")
+
+    return genai.GenerativeModel(
+        model_name=DEFAULT_MODEL_NAME,
+        generation_config={"response_mime_type": "application/json"},
     )
 
-    # Effective prompt design is 25% of your evaluation [cite: 143, 144]
+
+def _clone_data(data):
+    return json.loads(json.dumps(data))
+
+
+def _is_retryable_error(error):
+    message = str(error).lower()
+    return any(keyword in message for keyword in ("429", "quota", "rate limit", "resourceexhausted"))
+
+
+def _parse_json_response(response):
+    raw_text = (response.text or "").strip()
+    if not raw_text:
+        raise RuntimeError("Gemini returned an empty response")
+
+    cleaned_text = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+
+    try:
+        return json.loads(cleaned_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Gemini returned invalid JSON: {raw_text}") from exc
+
+
+def _generate_json_from_prompt(prompt):
+    cached_response = PROMPT_CACHE.get(prompt)
+    if cached_response is not None:
+        return _clone_data(cached_response)
+
+    model = _build_model()
+    last_error = None
+
+    for attempt in range(len(RETRY_DELAYS_SECONDS) + 1):
+        try:
+            response = model.generate_content(prompt)
+            parsed_response = _parse_json_response(response)
+            PROMPT_CACHE[prompt] = _clone_data(parsed_response)
+            return parsed_response
+        except Exception as exc:
+            last_error = exc
+            if attempt >= len(RETRY_DELAYS_SECONDS) or not _is_retryable_error(exc):
+                raise
+
+            time.sleep(RETRY_DELAYS_SECONDS[attempt])
+
+    raise last_error
+
+
+def get_reconciliation_from_gemini(patient_data):
+    recent_labs = _extract_recent_labs(patient_data)
+
     prompt = f"""
-    You are a clinical data reconciliation engine[cite: 11]. 
-    Analyze the following conflicting medication records and determine the 'most likely truth'.
-    
+    You are a clinical data reconciliation engine.
+    Analyze the following conflicting medication records and determine the most likely truth.
+
     Rules:
-    1. Prioritize recent 'last_updated' dates[cite: 54].
-    2. Consider 'Primary Care' more reliable for dosing than 'Pharmacy' history[cite: 54].
-    3. Check if the dose is safe for a patient with eGFR {patient_data.get('recent_labs', {}).get('eGFR', 'unknown')}[cite: 54].
+    1. Prioritize recent clinical updates over older records.
+    2. Consider primary care or clinician-authored sources more reliable for dosing than pharmacy history alone.
+    3. Consider the patient's renal safety context using eGFR {recent_labs.get('eGFR', 'unknown')}.
+    4. Return concise reasoning that a clinician can scan quickly.
+    5. Recommend follow-up actions when source conflicts remain.
 
     Data: {patient_data}
 
@@ -34,28 +99,22 @@ def get_reconciliation_from_gemini(patient_data):
         "reconciled_medication": string,
         "confidence_score": float,
         "reasoning": string,
+        "recommended_actions": [string],
         "clinical_safety_check": "PASSED" | "FAILED"
     }}
     """
-    
-    response = model.generate_content(prompt)
-    # Convert string response to a Python dictionary so the API can send it as JSON
-    return json.loads(response.text)
+
+    return _generate_json_from_prompt(prompt)
+
 
 def get_data_quality_from_gemini(patient_record):
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        generation_config={"response_mime_type": "application/json"}
-    )
-
-    # This prompt addresses the specific "Data Quality" requirements [cite: 63, 105]
     prompt = f"""
     You are a clinical data auditor. Analyze the following patient record for quality.
-    
+
     Check for:
-    1. Accuracy: Are values like blood pressure or heart rate physiologically possible? 
-    2. Completeness: Are essential fields like 'allergies' empty?
-    3. Timeliness: Is the 'last_updated' date too old (e.g., > 6 months)?
+    1. Accuracy: Are values like blood pressure or heart rate physiologically possible?
+    2. Completeness: Are essential fields like allergies empty?
+    3. Timeliness: Is the last_updated date too old (for example, older than six months)?
     4. Clinical Plausibility: Do the medications match the conditions?
 
     Record: {patient_record}
@@ -74,6 +133,5 @@ def get_data_quality_from_gemini(patient_record):
         ]
     }}
     """
-    
-    response = model.generate_content(prompt)
-    return json.loads(response.text)
+
+    return _generate_json_from_prompt(prompt)
