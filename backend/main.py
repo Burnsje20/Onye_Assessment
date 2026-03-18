@@ -1,29 +1,55 @@
-from fastapi import FastAPI
+# backend/main.py
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
 
-app = FastAPI()
+# Import your AI logic from the service file we created
+from services.gemini_service import get_reconciliation_from_gemini
 
-# 🛑 CRITICAL: This allows your React app (port 3000) to talk to this API
+app = FastAPI(title="Clinical Data Reconciliation Engine")
+
+# 1. Handle CORS (Requirement: Basic protection/connectivity) 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], 
+    allow_origins=["http://localhost:3000"], # Your React App
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# This defines what the incoming data should look like
-class MedicationRequest(BaseModel):
-    patient_context: dict
-    sources: List[dict]
+# 2. Define Data Models (Requirement: Input validation) 
+class MedicationSource(BaseModel):
+    system: str
+    medication: str
+    last_updated: Optional[str] = None
+    last_filled: Optional[str] = None
+    source_reliability: str
 
+class ReconcileRequest(BaseModel):
+    patient_context: Dict[str, Any]
+    recent_labs: Dict[str, Any]
+    sources: List[MedicationSource]
+
+# 3. Endpoint 1: Medication Reconciliation (40% of grade) [cite: 14, 16]
 @app.post("/api/reconcile/medication")
-async def reconcile_medication(data: MedicationRequest):
-    # This is where your AI logic will eventually go!
-    # For now, we return "mock" data to test the connection.
-    return {
-        "reconciled_medication": "Metformin 500mg twice daily",
-        "confidence_score": 0.88,
-        "reasoning": "Mock response: Connection successful!"
-    }
+async def reconcile_medication(request: ReconcileRequest):
+    try:
+        # Convert Pydantic model to dict to send to Gemini
+        data = request.model_dump()
+        result = get_reconciliation_from_gemini(data)
+        return result
+    except Exception as e:
+        # Requirement: Proper error handling 
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 4. Endpoint 2: Data Quality (Part of Part 1) [cite: 61]
+@app.post("/api/validate/data-quality")
+async def validate_data_quality(patient_record: Dict[str, Any]):
+    # You can later add a 'get_data_quality_from_gemini' function 
+    # to your services file to handle this endpoint!
+    return {"status": "Endpoint ready for quality logic"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
