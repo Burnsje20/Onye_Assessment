@@ -86,11 +86,12 @@ def get_reconciliation_from_gemini(patient_data):
     Analyze the following conflicting medication records and determine the most likely truth.
 
     Rules:
-    1. Prioritize recent clinical updates over older records.
-    2. Consider primary care or clinician-authored sources more reliable for dosing than pharmacy history alone.
-    3. Consider the patient's renal safety context using eGFR {recent_labs.get('eGFR', 'unknown')}.
-    4. Return concise reasoning that a clinician can scan quickly.
-    5. Recommend follow-up actions when source conflicts remain.
+    1. Prioritize the most recent medication evidence over older records.
+    2. If a newer clinician-authored record conflicts with an older clinician-authored record, prefer the newer clinician-authored dose.
+    3. Use pharmacy fill history as supporting evidence, but do not let it override a newer clinician-authored dose unless the clinician source is clearly unreliable.
+    4. Consider the patient's renal safety context using eGFR {recent_labs.get('eGFR', 'unknown')}.
+    5. Return concise reasoning that a clinician can scan quickly.
+    6. Recommend follow-up actions when source conflicts remain.
 
     Data: {patient_data}
 

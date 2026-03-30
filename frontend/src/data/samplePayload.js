@@ -9,13 +9,13 @@ export const sampleMedicationPayload = {
   sources: [
     {
       system: "Hospital EHR",
-      medication: "Metformin 1000mg twice daily",
+      medication: "Metformin 500mg twice daily",
       last_updated: "2024-10-15",
       source_reliability: "high",
     },
     {
       system: "Primary Care",
-      medication: "Metformin 500mg twice daily",
+      medication: "Metformin 1000mg twice daily",
       last_updated: "2025-01-20",
       source_reliability: "high",
     },
