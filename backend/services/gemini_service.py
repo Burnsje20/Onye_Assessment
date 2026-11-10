@@ -4,7 +4,6 @@ import os
 import time
 from pathlib import Path
 
-import google.generativeai as genai
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -14,9 +13,6 @@ DEFAULT_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 RETRY_DELAYS_SECONDS = (1, 2)
 PROMPT_CACHE = {}
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-
 def _extract_recent_labs(patient_data):
     patient_context = patient_data.get("patient_context", {}) or {}
     return patient_context.get("recent_labs") or patient_data.get("recent_labs", {}) or {}
@@ -25,6 +21,9 @@ def _extract_recent_labs(patient_data):
 def _build_model():
     if not os.getenv("GEMINI_API_KEY"):
         raise RuntimeError(f"Missing GEMINI_API_KEY in {ENV_PATH}")
+
+    import google.generativeai as genai
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
     return genai.GenerativeModel(
         model_name=DEFAULT_MODEL_NAME,
